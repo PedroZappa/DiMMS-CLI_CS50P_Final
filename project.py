@@ -61,7 +61,6 @@ app = typer.Typer(
 # print(res)
 
 def get_discogs_headers():
-    global DI
     """Get headers for Discogs API requests."""
     if not DISCOGS_TOKEN:
         raise ValueError("DISCOGS_TOKEN environment variable not set")
