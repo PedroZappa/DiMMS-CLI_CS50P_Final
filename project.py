@@ -30,7 +30,8 @@ session = CachedSession(
 DISCOGS_DATA = {}
 DISCOGS_KEY = os.getenv("DISCOGS_KEY")
 DISCOGS_SECRET = os.getenv("DISCOGS_SECRET")
-DISCOGS_API_TOKEN = None
+DISCOGS_TOKEN = None
+BASE_URL = "https://api.discogs.com"
 
 # Initialize Rich's console
 console = Console()
@@ -43,22 +44,49 @@ app = typer.Typer(
 )
 
 # OAuth
-client = WebApplicationClient(str(DISCOGS_KEY))
-auth_url = "https://www.discogs.com/oauth/authorize"
+# client = WebApplicationClient(str(DISCOGS_KEY))
+# auth_url = "https://www.discogs.com/oauth/authorize"
+#
+# url = client.prepare_request_uri(
+#     auth_url,
+#     scope = "read:user",
+# )
+# data = client.prepare_request_body(
+#     client_id=DISCOGS_KEY,
+#     client_secret=DISCOGS_SECRET,
+# )
+#
+# token_url = "https://api.discogs.com/oauth/request_token"
+# res = requests.post(token_url, data=data)
+# print(res)
 
-url = client.prepare_request_uri(
-    auth_url,
-    scope = "read:user",
-)
-data = client.prepare_request_body(
-    client_id=DISCOGS_KEY,
-    client_secret=DISCOGS_SECRET,
-)
+def get_discogs_headers():
+    global DI
+    """Get headers for Discogs API requests."""
+    if not DISCOGS_TOKEN:
+        raise ValueError("DISCOGS_TOKEN environment variable not set")
+    
+    return {
+        "Authorization": f"Discogs token={DISCOGS_TOKEN}",
+        "User-Agent": "DiMMS-CLI/1.0"
+    }
 
-token_url = "https://api.discogs.com/oauth/request_token"
-res = requests.post(token_url, data=data)
-print(res)
-
+def test_authentication():
+    """Test if authentication is working."""
+    try:
+        headers = get_discogs_headers()
+        response = session.get(f"{BASE_URL}/oauth/identity", headers=headers)
+        
+        if response.status_code == 200:
+            user_data = response.json()
+            logger.info(f"Authenticated as: {user_data.get('username')}")
+            return True
+        else:
+            logger.error(f"Authentication failed: {response.status_code}")
+            return False
+    except Exception as e:
+        logger.error(f"Authentication error: {e}")
+        return False
 
 
 # Entry Point
@@ -66,6 +94,15 @@ print(res)
 def main(ctx: typer.Context, ):
     """Main entry point for DiMMS-CLI."""
     print("[bold green]Discogs Music Metadata Search[/bold green]")
+    # Test authentication on startup
+    if DISCOGS_TOKEN:
+        if test_authentication():
+            print("[green]✓ Authentication successful[/green]")
+        else:
+            print("[red]✗ Authentication failed[/red]")
+            print("Please check your DISCOGS_TOKEN environment variable")
+    else:
+        print("[yellow]⚠  No DISCOGS_TOKEN found. Please set your Personal Access Token.[/yellow]")
     if ctx.invoked_subcommand is None:
         ctx.exit(0)
 
