@@ -121,8 +121,18 @@ def search_artists(artist_name: str):
     :type artist_name: str
     :except Exception: Search error
     """
-    artists = get_artists_data(artist_name)
-    print(artists)
+    DISCOGS_DATA = get_artists_data(artist_name)
+
+    table = Table(title=f"Search Results for: {artist_name}")
+    table.add_column("Name", justify="right", style="cyan", no_wrap=True)
+    table.add_column("ID", justify="left", style="magenta", no_wrap=True)
+    for artist in DISCOGS_DATA["artists"]:
+        table.add_row(
+            artist["title"],
+            str(artist["id"]),
+        )
+    
+    console.print(table)
 
 
 def get_artists_data(artist_name: str) -> Dict[str, Any]:
