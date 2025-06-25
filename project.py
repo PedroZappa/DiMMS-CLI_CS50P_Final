@@ -2,6 +2,7 @@ import typer
 import sys
 import os
 import logging
+import shlex
 from typing import Dict, Any
 from oauthlib.oauth2 import WebApplicationClient
 from requests.adapters import HTTPAdapter
@@ -9,6 +10,7 @@ from requests_cache import CachedSession
 from urllib3.util.retry import Retry
 from rich.console import Console
 from rich.table import Table
+from rich.prompt import Prompt
 from rich.progress import track
 from rich import print
 
@@ -41,14 +43,21 @@ app = typer.Typer(
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
+    interactive: bool = typer.Option(False, "--interactive", "-i", help="Run in interactive mode")
 ):
     """
     Main entry point for DiMMS-CLI.
 
     :param ctx: The Typer context object
     :type ctx: typer.Context
+    :param interactive: Whether to run in interactive mode
+    :type interactive: bool
     """
+    global interactive_mode
+    interactive_mode = interactive
+    
     print("[bold green]Discogs Music Metadata Search[/bold green]")
+    
     # Test authentication on startup
     if DISCOGS_TOKEN:
         if test_authentication():
@@ -60,8 +69,88 @@ def main(
         print(
             "[yellow]⚠  No DISCOGS_TOKEN found.\nPlease set your Personal Access Token.[/yellow]"
         )
+    
+    # If no subcommand is invoked and interactive mode is requested, start the loop
     if ctx.invoked_subcommand is None:
-        ctx.exit(0)
+        if interactive:
+            interactive_loop(ctx)
+        else:
+            # Show help if not in interactive mode and no command given
+            print("\n[yellow]Use --interactive or -i for interactive mode, or specify a command.[/yellow]")
+            print(ctx.get_help())
+
+
+def interactive_loop(ctx: typer.Context):
+    """
+    Run the interactive command loop.
+
+    :param ctx: The Typer context object
+    :type ctx: typer.Context
+    :except KeyboardInterrupt: User interrupts the loop
+    :except Exception: Error executing command
+    """
+    print("\n[bold cyan]Interactive Mode Started[/bold cyan]")
+    print("[dim]Type 'help' for available commands or 'exit'/'quit' to leave.[/dim]\n")
+    
+    while True:
+        try:
+            # Get user input
+            user_input = Prompt.ask("[bold blue]DiMMS[/bold blue]", default="").strip()
+            
+            if not user_input:
+                continue
+                
+            # Handle exit commands
+            if user_input.lower() in ['exit', 'quit', 'bye,' 'q']:
+                print("[green]Goodbye![/green]")
+                break
+                
+            # Handle help command
+            if user_input.lower() in ['help', 'h']:
+                typer.echo(ctx.get_help())
+                continue
+                
+            # Parse and execute command
+            exec_cmd(user_input)
+            
+        except KeyboardInterrupt:
+            print("\n[yellow]Use 'exit' or 'quit' to leave.[/yellow]")
+        except Exception as e:
+            print(f"[red]Error: {e}[/red]")
+
+
+def exec_cmd(user_input: str):
+    """
+    Parse and execute a command from user input.
+    
+    :param user_input: The command string entered by the user
+    :type user_input: str
+    """
+    try:
+        # Split the input into command and arguments
+        parts = shlex.split(user_input)
+        if not parts:
+            return
+            
+        command = parts[0].lower().replace('-', '_')  # Convert kebab-case to snake_case
+        args = parts[1:]
+        
+        # Execute the appropriate command
+        if command == "hello":
+            name = args[0] if args else "world"
+            hello(name)
+        elif command == "search_artists":
+            if not args:
+                print("[red]Error: Artist name is required[/red]")
+                print("[dim]Usage: search-artists <artist_name>[/dim]")
+                return
+            search_artists(" ".join(args))
+        else:
+            print(f"[red]Unknown command: {command}[/red]")
+            print("[dim]Type 'help' for available commands.[/dim]")
+            
+    except Exception as e:
+        print(f"[red]Error executing command: {e}[/red]")
 
 
 # Authentication
@@ -106,11 +195,6 @@ def test_authentication():
         return False
 
 
-@app.command()
-def hello(name: str = "world"):
-    print(f"Hello from {name}")
-
-
 # Commands
 @app.command()
 def search_artists(artist_name: str):
@@ -131,8 +215,9 @@ def search_artists(artist_name: str):
             artist["title"],
             str(artist["id"]),
         )
-    
+
     console.print(table)
+    print("Total Results: ", DISCOGS_DATA["total_results"])
 
 
 def get_artists_data(artist_name: str) -> Dict[str, Any]:
@@ -163,7 +248,7 @@ def get_artists_data(artist_name: str) -> Dict[str, Any]:
             result_dict["total_results"] = data.get("pagination", {}).get("items", 0)
             result_dict["artists"] = []
 
-            for result in data.get("results", [])[:6]:  # Show first 6
+            for result in data.get("results", [])[:10]:  # Show first 6
                 artist_info = {
                     "title": result.get("title"),
                     "id": result.get("id"),
@@ -179,6 +264,93 @@ def get_artists_data(artist_name: str) -> Dict[str, Any]:
 
     return result_dict
 
+
+@app.command()
+def get_albums_by_artist(artist_id: int):
+    """
+    Get albums by artist ID.
+
+    :param artist_id: The ID of the artist to get albums for
+    :type artist_id: int
+    """
+    DISCOGS_DATA = get_albums_data(artist_id)
+
+    table = Table(title=f"Albums for Artist ID: {artist_id}")
+    table.add_column("No.", justify="right", style="green", no_wrap=True)
+    table.add_column("Title", justify="right", style="cyan", no_wrap=True)
+    table.add_column("ID", justify="left", style="magenta", no_wrap=True)
+    
+    # for album in DISCOGS_DATA["albums"]:
+    #     table.add_row(
+    #         album["title"],
+    #         str(album["id"]),
+    #     )
+
+    for i, (cmd, desc) in enumerate(DISCOGS_DATA["albums"], 1):
+        table.add_row(str(i), cmd, desc)
+
+
+    console.print(table)
+    print("Total Results: ", DISCOGS_DATA["total_results"])
+
+
+def get_albums_data(artist_id: int) -> Dict[str, Any]:
+    """
+    Get albums by artist ID using the Discogs API.
+
+    :param artist_id: The ID of the artist to get albums for
+    :type artist_id: int
+    :returns: A dictionary containing the found albums data
+    :rtype: Dict[str, Any]
+    """
+    result_dict = {}
+    try:
+        headers = get_discogs_headers()
+        params = {"artist": artist_id}
+
+        response = CACHED_SESSION.get(
+            f"{BASE_URL}/database/search", headers=headers, params=params
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            result_dict["total_results"] = data.get("pagination", {}).get("items", 0)
+            result_dict["albums"] = []
+
+            for result in data.get("results", [])[:10]:
+                album_info = {
+                    "title": result.get("title"),
+                    "id": result.get("id"),
+                    "uri": result.get("uri"),
+                }
+                result_dict["albums"].append(album_info)
+        else:
+            result_dict["error"] = f"Error: {response.status_code}"
+    except Exception as e:
+        logger.error(f"Search error: {e}")
+        result_dict["error"] = str(e)
+        
+    return result_dict
+
+
+@app.command()
+def help():
+    """Show numbered help menu."""
+    table = Table(title="Available Commands")
+    table.add_column("No.", style="cyan", width=4)
+    table.add_column("Command", style="green")
+    table.add_column("Description", style="white")
+    
+    commands = [
+        ("search-artists", "Search for an artist by name"),
+        ("hello", "Say hello to someone"),
+        ("list-albums", "List albums for a specific artist"),
+    ]
+    
+    for i, (cmd, desc) in enumerate(commands, 1):
+        table.add_row(str(i), cmd, desc)
+    
+    console.print(table)
 
 if __name__ == "__main__":
     app()
