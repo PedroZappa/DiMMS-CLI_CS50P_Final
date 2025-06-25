@@ -12,6 +12,7 @@ SHELL	:= bash --rcfile ~/.bashrc
 NAME = CS50P_Final
 VENV = .venv
 MAIN = project.py
+ARGS = 
 MAIN_TEST = test_project.py
 EXEC = ./scripts/run.sh && python3 $(MAIN)
 
@@ -46,7 +47,7 @@ run:	## Run project
 	fi
 	@echo "* $(MAG)$(NAME) $(YEL)executing$(D): $(_SUCCESS)"
 	@echo "$(GRN)$(_SEP)$(D)"
-	@source $(EXEC)
+	@source $(EXEC) $(ARGS)
 	@echo "$(GRN)$(_SEP)$(D)"
 	@echo "* $(MAG)$(NAME) $(YEL)finished$(D):"
 
