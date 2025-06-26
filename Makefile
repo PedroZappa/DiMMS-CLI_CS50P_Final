@@ -63,6 +63,9 @@ black:		## Run black formatter
 
 ##@ Test/Debug Rules 
 
+posting:	## Run posting
+	posting --collection dimms_posting --env .env
+
 test:		## Run tests
 	pytest $(MAIN_TEST)
 

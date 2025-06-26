@@ -145,8 +145,8 @@ def exec_cmd(user_input: str) -> None:
                 print("[dim]Usage: search-artists <artist_name>[/dim]")
                 return
             search_artists(" ".join(args))
-        elif command == "get_albums_by_artist":
-            get_albums_by_artist(int(args[0]))
+        elif command == "list_albums":
+            list_albums(int(args[0]))
         else:
             print(f"[red]Unknown command: {command}[/red]")
             print("[dim]Type 'help' for available commands.[/dim]")
@@ -268,7 +268,7 @@ def get_artists_data(artist_name: str) -> Dict[str, Any]:
 
 
 @app.command()
-def get_albums_by_artist(artist_id: int) -> None:
+def list_albums(artist_id: int) -> None:
     """
     Get albums by artist ID.
 
@@ -346,7 +346,6 @@ def help() -> None:
     
     commands = [
         ("search-artists", "Search for an artist by name"),
-        ("hello", "Say hello to someone"),
         ("list-albums", "List albums for a specific artist"),
     ]
     
