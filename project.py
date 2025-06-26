@@ -243,7 +243,6 @@ def test_authentication() -> bool:
 
 # Commands
 @app.command()
-@app.command()
 def search_artists(artist_name: str) -> None:
     """
     Search for an artist by name.
@@ -341,7 +340,6 @@ def list_albums(artist_id: int) -> None:
     """
     global DISCOGS_DATA
 
-    # Get release data
     release_data = get_release_data(artist_id)
 
     # Find which artist this ID belongs to
@@ -377,12 +375,14 @@ def list_albums(artist_id: int) -> None:
     }
 
     table = Table(title=f"Albums for Artist ID: {artist_id}")
+    table.add_column("Artist", justify="right", style="green", no_wrap=True)
     table.add_column("Title", justify="right", style="cyan", no_wrap=True)
     table.add_column("Year", justify="left", style="yellow", no_wrap=True)
     table.add_column("ID", justify="left", style="magenta", no_wrap=True)
 
     for release in release_data["releases"]:
         table.add_row(
+            release["artist"],
             release["title"],
             str(release["year"]),
             str(release["id"]),
@@ -455,10 +455,13 @@ def write_last_search_to_file():
         fieldnames = ["title", "id", "uri"]
         filename = f"artists_{last_search['key']}.csv"
 
-        with open(filename, "w", newline="", encoding="utf-8") as file:
-            writer = csv.DictWriter(file, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(last_search["data"]["artists"])
+        try:
+            with open(filename, "w", newline="", encoding="utf-8") as file:
+                writer = csv.DictWriter(file, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(last_search["data"]["artists"])
+        except Exception as e:
+            print(f"[red]Error writing to {filename}: {e}[/red]")
 
         print(
             f"[green]Successfully wrote {len(last_search['data']['artists'])} artists to {filename}[/green]"
@@ -473,10 +476,14 @@ def write_last_search_to_file():
         fieldnames = ["title", "year", "id", "artist"]
         filename = f"albums_{last_search['key']}_{last_search['artist_id']}.csv"
 
-        with open(filename, "w", newline="", encoding="utf-8") as file:
-            writer = csv.DictWriter(file, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(last_search["data"]["releases"])
+        try:
+            with open(filename, "w", newline="", encoding="utf-8") as file:
+                writer = csv.DictWriter(file, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(last_search["data"]["releases"])
+        except Exception as e:
+            print(f"[red]Error writing to {filename}: {e}[/red]")
+            return
 
         print(
             f"[green]Successfully wrote {len(last_search['data']['releases'])} albums to {filename}[/green]"
