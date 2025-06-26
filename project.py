@@ -44,7 +44,7 @@ app = typer.Typer(
 def main(
     ctx: typer.Context,
     interactive: bool = typer.Option(False, "--interactive", "-i", help="Run in interactive mode")
-):
+) -> None:
     """
     Main entry point for DiMMS-CLI.
 
@@ -65,10 +65,12 @@ def main(
         else:
             print("[red]✗ Authentication failed[/red]")
             print("Please check your DISCOGS_TOKEN environment variable")
+            sys.exit(1)
     else:
         print(
             "[yellow]⚠  No DISCOGS_TOKEN found.\nPlease set your Personal Access Token.[/yellow]"
         )
+        sys.exit(1)
     
     # If no subcommand is invoked and interactive mode is requested, start the loop
     if ctx.invoked_subcommand is None:
@@ -80,7 +82,7 @@ def main(
             print(ctx.get_help())
 
 
-def interactive_loop(ctx: typer.Context):
+def interactive_loop(ctx: typer.Context) -> None:
     """
     Run the interactive command loop.
 
@@ -90,7 +92,8 @@ def interactive_loop(ctx: typer.Context):
     :except Exception: Error executing command
     """
     print("\n[bold cyan]Interactive Mode Started[/bold cyan]")
-    print("[dim]Type 'help' for available commands or 'exit'/'quit' to leave.[/dim]\n")
+    print("[dim]Type 'help' for available commands[/dim]")
+    print("[dim]or 'exit'/'quit'/'bye'/'q' to leave.[/dim]\n")
     
     while True:
         try:
@@ -101,7 +104,7 @@ def interactive_loop(ctx: typer.Context):
                 continue
                 
             # Handle exit commands
-            if user_input.lower() in ['exit', 'quit', 'bye,' 'q']:
+            if user_input.lower() in ['exit', 'quit', 'bye', 'q']:
                 print("[green]Goodbye![/green]")
                 break
                 
@@ -119,7 +122,7 @@ def interactive_loop(ctx: typer.Context):
             print(f"[red]Error: {e}[/red]")
 
 
-def exec_cmd(user_input: str):
+def exec_cmd(user_input: str) -> None:
     """
     Parse and execute a command from user input.
     
@@ -136,15 +139,14 @@ def exec_cmd(user_input: str):
         args = parts[1:]
         
         # Execute the appropriate command
-        if command == "hello":
-            name = args[0] if args else "world"
-            hello(name)
-        elif command == "search_artists":
+        if command == "search_artists":
             if not args:
                 print("[red]Error: Artist name is required[/red]")
                 print("[dim]Usage: search-artists <artist_name>[/dim]")
                 return
             search_artists(" ".join(args))
+        elif command == "get_albums_by_artist":
+            get_albums_by_artist(int(args[0]))
         else:
             print(f"[red]Unknown command: {command}[/red]")
             print("[dim]Type 'help' for available commands.[/dim]")
@@ -154,11 +156,11 @@ def exec_cmd(user_input: str):
 
 
 # Authentication
-def get_discogs_headers():
+def get_discogs_headers() -> dict:
     """
     Get headers for Discogs API requests.
 
-    :raise TypeError:
+    :raise ValueError: If DISCOGS_TOKEN environment variable is not set
     :return: A dictionary of headers
     :rtype: dict
     """
@@ -171,7 +173,7 @@ def get_discogs_headers():
     }
 
 
-def test_authentication():
+def test_authentication() -> bool:
     """
     Test if authentication is working.
 
@@ -197,7 +199,7 @@ def test_authentication():
 
 # Commands
 @app.command()
-def search_artists(artist_name: str):
+def search_artists(artist_name: str) -> None:
     """
     Search for an artist by name.
 
@@ -225,7 +227,7 @@ def get_artists_data(artist_name: str) -> Dict[str, Any]:
     Search for artists by name using the Discogs API.
 
     Performs a search query against the Discogs database to find artists matching
-    the provided name. Returns up to 6 results with artist information including
+    the provided name. Returns up to 10 results with artist information including
     title, ID, and URI.
 
     :param artist_name: The name of the artist to search for. Can be a partial
@@ -266,7 +268,7 @@ def get_artists_data(artist_name: str) -> Dict[str, Any]:
 
 
 @app.command()
-def get_albums_by_artist(artist_id: int):
+def get_albums_by_artist(artist_id: int) -> None:
     """
     Get albums by artist ID.
 
@@ -314,6 +316,7 @@ def get_albums_data(artist_id: int) -> Dict[str, Any]:
 
         if response.status_code == 200:
             data = response.json()
+            print(data)
             result_dict["total_results"] = data.get("pagination", {}).get("items", 0)
             result_dict["albums"] = []
 
@@ -334,7 +337,7 @@ def get_albums_data(artist_id: int) -> Dict[str, Any]:
 
 
 @app.command()
-def help():
+def help() -> None:
     """Show numbered help menu."""
     table = Table(title="Available Commands")
     table.add_column("No.", style="cyan", width=4)
