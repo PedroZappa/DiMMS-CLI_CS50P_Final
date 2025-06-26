@@ -99,7 +99,7 @@ def interactive_loop(ctx: typer.Context) -> None:
     
     # Set up command completion
     command_completer = WordCompleter([
-        'search-artists', 'list-albums', 'help', 'exit', 'quit', 'bye', 'q'
+        'search-artists', 'list-albums', 'help', 'bye', 'q'
     ], ignore_case=True)
     
     # Set up history
@@ -109,7 +109,7 @@ def interactive_loop(ctx: typer.Context) -> None:
         try:
             # Get user input with autocomplete and history
             user_input = prompt(
-                "DiMMS> ",
+                [('bold fg:ansiblue', 'DiMMS '), ('bold fg:ansigreen', '()'), ('', ': ')],
                 completer=command_completer,
                 history=history,
                 complete_while_typing=True
@@ -119,8 +119,8 @@ def interactive_loop(ctx: typer.Context) -> None:
                 continue
                 
             # Handle exit commands
-            if user_input.lower() in ['exit', 'quit', 'bye', 'q']:
-                print("Goodbye!")
+            if user_input.lower() in ['bye', 'q']:
+                print("[bold green]Goodbye![/bold green]")
                 break
                 
             # Handle help command
@@ -132,9 +132,9 @@ def interactive_loop(ctx: typer.Context) -> None:
             exec_cmd(user_input)
             
         except KeyboardInterrupt:
-            print("\nUse 'exit' or 'quit' to leave.")
+            print("\nUse 'bye'/'q' to leave.")
         except EOFError:
-            print("\nGoodbye!")
+            print("[bold green]Goodbye![/bold green]")
             break
         except Exception as e:
             print(f"Error: {e}")
@@ -153,6 +153,7 @@ def exec_cmd(user_input: str) -> None:
         if not parts:
             return
             
+        print(user_input)
         command = parts[0].lower().replace('-', '_')  # Convert kebab-case to snake_case
         args = parts[1:]
         
@@ -268,7 +269,7 @@ def get_artists_data(artist_name: str) -> Dict[str, Any]:
             result_dict["total_results"] = data.get("pagination", {}).get("items", 0)
             result_dict["artists"] = []
 
-            for result in data.get("results", [])[:10]:  # Show first 6
+            for result in data.get("results", [])[:]:
                 artist_info = {
                     "title": result.get("title"),
                     "id": result.get("id"),
@@ -293,30 +294,27 @@ def list_albums(artist_id: int) -> None:
     :param artist_id: The ID of the artist to get albums for
     :type artist_id: int
     """
-    DISCOGS_DATA = get_albums_data(artist_id)
+    DISCOGS_DATA = get_release_data(artist_id)
 
     table = Table(title=f"Albums for Artist ID: {artist_id}")
-    table.add_column("No.", justify="right", style="green", no_wrap=True)
     table.add_column("Title", justify="right", style="cyan", no_wrap=True)
+    table.add_column("Year", justify="left", style="yellow", no_wrap=True)
     table.add_column("ID", justify="left", style="magenta", no_wrap=True)
-    
-    # for album in DISCOGS_DATA["albums"]:
-    #     table.add_row(
-    #         album["title"],
-    #         str(album["id"]),
-    #     )
 
-    for i, (cmd, desc) in enumerate(DISCOGS_DATA["albums"], 1):
-        table.add_row(str(i), cmd, desc)
-
+    for release in DISCOGS_DATA["releases"]:
+        table.add_row(
+            release["title"],
+            str(release["year"]),
+            str(release["id"]),
+        )
 
     console.print(table)
     print("Total Results: ", DISCOGS_DATA["total_results"])
 
 
-def get_albums_data(artist_id: int) -> Dict[str, Any]:
+def get_release_data(artist_id: int) -> Dict[str, Any]:
     """
-    Get albums by artist ID using the Discogs API.
+    Get releases by artist ID using the Discogs API.
 
     :param artist_id: The ID of the artist to get albums for
     :type artist_id: int
@@ -326,25 +324,29 @@ def get_albums_data(artist_id: int) -> Dict[str, Any]:
     result_dict = {}
     try:
         headers = get_discogs_headers()
-        params = {"artist": artist_id}
+        params = {
+            "artist": artist_id
+        }
 
         response = CACHED_SESSION.get(
-            f"{BASE_URL}/database/search", headers=headers, params=params
+            f"{BASE_URL}/artists/{artist_id}/releases", headers=headers, params=params
         )
 
         if response.status_code == 200:
             data = response.json()
-            print(data)
+            # print(data)
             result_dict["total_results"] = data.get("pagination", {}).get("items", 0)
-            result_dict["albums"] = []
+            result_dict["releases"] = []
 
-            for result in data.get("results", [])[:10]:
-                album_info = {
-                    "title": result.get("title"),
+            for result in data.get("releases", [])[:]:
+                release_info = {
                     "id": result.get("id"),
-                    "uri": result.get("uri"),
+                    "main_release": result.get("main_release"),
+                    "artist": result.get("artist"),
+                    "title": result.get("title"),
+                    "year": result.get("year"),
                 }
-                result_dict["albums"].append(album_info)
+                result_dict["releases"].append(release_info)
         else:
             result_dict["error"] = f"Error: {response.status_code}"
     except Exception as e:
@@ -352,25 +354,6 @@ def get_albums_data(artist_id: int) -> Dict[str, Any]:
         result_dict["error"] = str(e)
         
     return result_dict
-
-
-@app.command()
-def help() -> None:
-    """Show numbered help menu."""
-    table = Table(title="Available Commands")
-    table.add_column("No.", style="cyan", width=4)
-    table.add_column("Command", style="green")
-    table.add_column("Description", style="white")
-    
-    commands = [
-        ("search-artists", "Search for an artist by name"),
-        ("list-albums", "List albums for a specific artist"),
-    ]
-    
-    for i, (cmd, desc) in enumerate(commands, 1):
-        table.add_row(str(i), cmd, desc)
-    
-    console.print(table)
 
 
 if __name__ == "__main__":
