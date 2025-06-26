@@ -1,8 +1,8 @@
-oauthlib
-requests
-requests-cache
-rich
-typer
 mypy
 pytest
 black
+oauthlib
+requests-cache
+rich
+typer
+prompt-toolkit

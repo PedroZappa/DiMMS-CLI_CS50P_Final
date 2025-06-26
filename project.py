@@ -13,6 +13,9 @@ from rich.table import Table
 from rich.prompt import Prompt
 from rich.progress import track
 from rich import print
+from prompt_toolkit import prompt
+from prompt_toolkit.completion import WordCompleter
+from prompt_toolkit.history import InMemoryHistory
 
 # Init Logging
 logging.basicConfig(
@@ -84,28 +87,40 @@ def main(
 
 def interactive_loop(ctx: typer.Context) -> None:
     """
-    Run the interactive command loop.
-
+    Run the interactive command loop with autocomplete and history.
+    
     :param ctx: The Typer context object
     :type ctx: typer.Context
-    :except KeyboardInterrupt: User interrupts the loop
-    :except Exception: Error executing command
+    :return: None
     """
     print("\n[bold cyan]Interactive Mode Started[/bold cyan]")
     print("[dim]Type 'help' for available commands[/dim]")
     print("[dim]or 'exit'/'quit'/'bye'/'q' to leave.[/dim]\n")
     
+    # Set up command completion
+    command_completer = WordCompleter([
+        'search-artists', 'list-albums', 'help', 'exit', 'quit', 'bye', 'q'
+    ], ignore_case=True)
+    
+    # Set up history
+    history = InMemoryHistory()
+    
     while True:
         try:
-            # Get user input
-            user_input = Prompt.ask("[bold blue]DiMMS[/bold blue]", default="").strip()
+            # Get user input with autocomplete and history
+            user_input = prompt(
+                "DiMMS> ",
+                completer=command_completer,
+                history=history,
+                complete_while_typing=True
+            ).strip()
             
             if not user_input:
                 continue
                 
             # Handle exit commands
             if user_input.lower() in ['exit', 'quit', 'bye', 'q']:
-                print("[green]Goodbye![/green]")
+                print("Goodbye!")
                 break
                 
             # Handle help command
@@ -117,9 +132,12 @@ def interactive_loop(ctx: typer.Context) -> None:
             exec_cmd(user_input)
             
         except KeyboardInterrupt:
-            print("\n[yellow]Use 'exit' or 'quit' to leave.[/yellow]")
+            print("\nUse 'exit' or 'quit' to leave.")
+        except EOFError:
+            print("\nGoodbye!")
+            break
         except Exception as e:
-            print(f"[red]Error: {e}[/red]")
+            print(f"Error: {e}")
 
 
 def exec_cmd(user_input: str) -> None:
@@ -353,6 +371,7 @@ def help() -> None:
         table.add_row(str(i), cmd, desc)
     
     console.print(table)
+
 
 if __name__ == "__main__":
     app()
