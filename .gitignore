@@ -195,3 +195,5 @@ cython_debug/
 
 # DB
 discogs_api_cache.sqlite
+out.csv
+*_dump.csv

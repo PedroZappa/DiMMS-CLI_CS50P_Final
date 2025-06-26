@@ -1,6 +1,7 @@
 import typer
 import sys
 import os
+import csv
 import logging
 import shlex
 import ast
@@ -16,7 +17,9 @@ from prompt_toolkit.history import InMemoryHistory
 
 # Global Variable
 BASE_URL: str = "https://api.discogs.com"
-CACHED_SESSION: CachedSession = CachedSession("discogs_api_cache", backend="sqlite", expire_after=1800)
+CACHED_SESSION: CachedSession = CachedSession(
+    "discogs_api_cache", backend="sqlite", expire_after=1800
+)
 DISCOGS_DATA: Dict[str, Any] = {}
 DISCOGS_TOKEN: str | None = os.getenv("DISCOGS_TOKEN")
 INTERACTIVE_MODE: bool = False
@@ -38,6 +41,7 @@ app = typer.Typer(
     no_args_is_help=True,
     pretty_exceptions_short=False,
 )
+
 
 # Entry Point
 @app.callback(invoke_without_command=True)
@@ -173,8 +177,20 @@ def exec_cmd(user_input: str) -> None:
             search_artists(" ".join(args))
         elif command == "list_albums":
             list_albums(int(args[0]))
-        elif command == "write_to_file":
-            write_to_file()
+        elif command == "write_last_search_to_file":
+            write_last_search_to_file()
+        elif command == "dump_all_data":
+            # Parse optional arguments for dump command
+            filename = "complete_dump.csv"
+            separate_files = False
+
+            for i, arg in enumerate(args):
+                if arg in ["-f", "--file"] and i + 1 < len(args):
+                    filename = args[i + 1]
+                elif arg in ["-s", "--separate"]:
+                    separate_files = True
+
+            dump_all_data(filename, separate_files)
         else:
             print(f"[red]Unknown command: {command}[/red]")
             print("[dim]Type 'help' for available commands.[/dim]")
@@ -227,6 +243,7 @@ def test_authentication() -> bool:
 
 # Commands
 @app.command()
+@app.command()
 def search_artists(artist_name: str) -> None:
     """
     Search for an artist by name.
@@ -235,19 +252,37 @@ def search_artists(artist_name: str) -> None:
     :type artist_name: str
     :except Exception: Search error
     """
-    DISCOGS_DATA = get_artists_data(artist_name)
+    global DISCOGS_DATA
+    if "artists" not in DISCOGS_DATA:
+        DISCOGS_DATA["artists"] = {}
+
+    search_results = get_artists_data(artist_name)
+
+    # Initialize the artist entry with search results and empty albums
+    DISCOGS_DATA["artists"][artist_name.lower()] = {
+        "search_results": search_results,
+        "albums": {},
+    }
+
+    # Keep track of the last searched artist
+    DISCOGS_DATA["last_search"] = {
+        "type": "artists",
+        "key": artist_name.lower(),
+        "data": search_results,
+    }
 
     table = Table(title=f"Search Results for: {artist_name}")
     table.add_column("Name", justify="right", style="cyan", no_wrap=True)
     table.add_column("ID", justify="left", style="magenta", no_wrap=True)
-    for artist in DISCOGS_DATA["artists"]:
+
+    for artist in search_results["artists"]:
         table.add_row(
             artist["title"],
             str(artist["id"]),
         )
 
     console.print(table)
-    print("Total Results: ", DISCOGS_DATA["total_results"])
+    print("Total Results: ", search_results["total_artist"])
 
 
 def get_artists_data(artist_name: str) -> Dict[str, Any]:
@@ -276,7 +311,7 @@ def get_artists_data(artist_name: str) -> Dict[str, Any]:
 
         if response.status_code == 200:
             data = response.json()
-            result_dict["total_results"] = data.get("pagination", {}).get("items", 0)
+            result_dict["total_artist"] = data.get("pagination", {}).get("items", 0)
             result_dict["artists"] = []
 
             for result in data.get("results", [])[:]:
@@ -299,19 +334,54 @@ def get_artists_data(artist_name: str) -> Dict[str, Any]:
 @app.command()
 def list_albums(artist_id: int) -> None:
     """
-    Get albums by artist ID.
+    Get albums by artist ID and store them under the appropriate artist.
 
     :param artist_id: The ID of the artist to get albums for
     :type artist_id: int
     """
-    DISCOGS_DATA = get_release_data(artist_id)
+    global DISCOGS_DATA
+
+    # Get release data
+    release_data = get_release_data(artist_id)
+
+    # Find which artist this ID belongs to
+    target_artist_key = None
+    for artist_key, artist_data in DISCOGS_DATA.get("artists", {}).items():
+        if "search_results" in artist_data:
+            for artist in artist_data["search_results"].get("artists", []):
+                if artist["id"] == artist_id:
+                    target_artist_key = artist_key
+                    break
+        if target_artist_key:
+            break
+
+    # If no matching artist found, create a generic entry
+    if not target_artist_key:
+        if "artists" not in DISCOGS_DATA:
+            DISCOGS_DATA["artists"] = {}
+        target_artist_key = f"artist_{artist_id}"
+        DISCOGS_DATA["artists"][target_artist_key] = {
+            "search_results": {"artists": [], "total_artist": 0},
+            "albums": {},
+        }
+
+    # Store albums under the artist's albums section
+    DISCOGS_DATA["artists"][target_artist_key]["albums"][str(artist_id)] = release_data
+
+    # Update last search
+    DISCOGS_DATA["last_search"] = {
+        "type": "albums",
+        "key": target_artist_key,
+        "artist_id": str(artist_id),
+        "data": release_data,
+    }
 
     table = Table(title=f"Albums for Artist ID: {artist_id}")
     table.add_column("Title", justify="right", style="cyan", no_wrap=True)
     table.add_column("Year", justify="left", style="yellow", no_wrap=True)
     table.add_column("ID", justify="left", style="magenta", no_wrap=True)
 
-    for release in DISCOGS_DATA["releases"]:
+    for release in release_data["releases"]:
         table.add_row(
             release["title"],
             str(release["year"]),
@@ -319,7 +389,7 @@ def list_albums(artist_id: int) -> None:
         )
 
     console.print(table)
-    print("Total Results: ", DISCOGS_DATA["total_results"])
+    print("Total Results: ", release_data["total_releases"])
 
 
 def get_release_data(artist_id: int) -> Dict[str, Any]:
@@ -343,7 +413,7 @@ def get_release_data(artist_id: int) -> Dict[str, Any]:
         if response.status_code == 200:
             data = response.json()
             # print(data)
-            result_dict["total_results"] = data.get("pagination", {}).get("items", 0)
+            result_dict["total_releases"] = data.get("pagination", {}).get("items", 0)
             result_dict["releases"] = []
 
             for result in data.get("releases", [])[:]:
@@ -364,13 +434,265 @@ def get_release_data(artist_id: int) -> Dict[str, Any]:
 
 
 @app.command()
-def write_to_file():
+def write_last_search_to_file():
     """
-    Write data to a CSV file.
+    Write data to a CSV file using the last search results.
     """
-    with open("out.csv", "w") as file:
-        for artist in DISCOGS_DATA["artists"]:
-            file.write(f"{artist['title'],artist['id'],artist['uri']}\n")
+    if not DISCOGS_DATA or "last_search" not in DISCOGS_DATA:
+        print(
+            "[red]No recent search data available. Please search for artists or albums first.[/red]"
+        )
+        return
+
+    last_search = DISCOGS_DATA["last_search"]
+
+    if last_search["type"] == "artists":
+        # Write artist data
+        if "artists" not in last_search["data"]:
+            print("[red]No artist data in last search.[/red]")
+            return
+
+        fieldnames = ["title", "id", "uri"]
+        filename = f"artists_{last_search['key']}.csv"
+
+        with open(filename, "w", newline="", encoding="utf-8") as file:
+            writer = csv.DictWriter(file, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(last_search["data"]["artists"])
+
+        print(
+            f"[green]Successfully wrote {len(last_search['data']['artists'])} artists to {filename}[/green]"
+        )
+
+    elif last_search["type"] == "albums":
+        # Write album data
+        if "releases" not in last_search["data"]:
+            print("[red]No album data in last search.[/red]")
+            return
+
+        fieldnames = ["title", "year", "id", "artist"]
+        filename = f"albums_{last_search['key']}_{last_search['artist_id']}.csv"
+
+        with open(filename, "w", newline="", encoding="utf-8") as file:
+            writer = csv.DictWriter(file, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(last_search["data"]["releases"])
+
+        print(
+            f"[green]Successfully wrote {len(last_search['data']['releases'])} albums to {filename}[/green]"
+        )
+
+
+@app.command()
+def dump_all_data(
+    filename: str = typer.Option(
+        "complete_dump.csv", "--file", "-f", help="Output CSV filename"
+    ),
+    separate_files: bool = typer.Option(
+        False, "--separate", "-s", help="Create separate files for artists and albums"
+    ),
+):
+    """
+    Dump all stored data (artists and albums) from the program's lifetime to CSV file(s).
+
+    :param filename: The base filename for the dump
+    :type filename: str
+    :param separate_files: Whether to create separate files for artists and albums
+    :type separate_files: bool
+    """
+    if not DISCOGS_DATA or "artists" not in DISCOGS_DATA:
+        print(
+            "[red]No data available to dump. Please perform some searches first.[/red]"
+        )
+        return
+
+    try:
+        if separate_files:
+            # Create separate files for artists and albums
+            _dump_artists_data(f"artists_{filename}")
+            _dump_albums_data(f"albums_{filename}")
+        else:
+            # Create a single comprehensive file
+            _dump_comprehensive_data(filename)
+
+    except Exception as e:
+        print(f"[red]Error during dump: {e}[/red]")
+
+
+def _dump_artists_data(filename: str) -> None:
+    """
+    Dump all artist search results to a CSV file.
+
+    :param filename: Output filename
+    :type filename: str
+    """
+    artists_data = []
+
+    for artist_key, artist_info in DISCOGS_DATA["artists"].items():
+        if (
+            "search_results" in artist_info
+            and "artists" in artist_info["search_results"]
+        ):
+            for artist in artist_info["search_results"]["artists"]:
+                artists_data.append(
+                    {
+                        "search_term": artist_key,
+                        "title": artist.get("title", ""),
+                        "id": artist.get("id", ""),
+                        "uri": artist.get("uri", ""),
+                        "total_results": artist_info["search_results"].get(
+                            "total_artist", 0
+                        ),
+                    }
+                )
+
+    if artists_data:
+        fieldnames = ["search_term", "title", "id", "uri", "total_results"]
+
+        with open(filename, "w", newline="", encoding="utf-8") as file:
+            writer = csv.DictWriter(file, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(artists_data)
+
+        print(
+            f"[green]Successfully wrote {len(artists_data)} artist records to {filename}[/green]"
+        )
+    else:
+        print("[yellow]No artist data found to write.[/yellow]")
+
+
+def _dump_albums_data(filename: str) -> None:
+    """
+    Dump all album/release data to a CSV file.
+
+    :param filename: Output filename
+    :type filename: str
+    """
+    albums_data = []
+
+    for artist_key, artist_info in DISCOGS_DATA["artists"].items():
+        if "albums" in artist_info:
+            for artist_id, album_info in artist_info["albums"].items():
+                if "releases" in album_info:
+                    for release in album_info["releases"]:
+                        albums_data.append(
+                            {
+                                "search_term": artist_key,
+                                "artist_id": artist_id,
+                                "release_id": release.get("id", ""),
+                                "artist_name": release.get("artist", ""),
+                                "title": release.get("title", ""),
+                                "year": release.get("year", ""),
+                                "total_releases": album_info.get("total_releases", 0),
+                            }
+                        )
+
+    if albums_data:
+        fieldnames = [
+            "search_term",
+            "artist_id",
+            "release_id",
+            "artist_name",
+            "title",
+            "year",
+            "total_releases",
+        ]
+
+        with open(filename, "w", newline="", encoding="utf-8") as file:
+            writer = csv.DictWriter(file, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(albums_data)
+
+        print(
+            f"[green]Successfully wrote {len(albums_data)} album records to {filename}[/green]"
+        )
+    else:
+        print("[yellow]No album data found to write.[/yellow]")
+
+
+def _dump_comprehensive_data(filename: str) -> None:
+    """
+    Dump all data in a single comprehensive CSV file.
+
+    :param filename: Output filename
+    :type filename: str
+    """
+    all_data = []
+
+    # Process all artists and their albums
+    for artist_key, artist_info in DISCOGS_DATA["artists"].items():
+        # Add artist search results
+        if (
+            "search_results" in artist_info
+            and "artists" in artist_info["search_results"]
+        ):
+            for artist in artist_info["search_results"]["artists"]:
+                all_data.append(
+                    {
+                        "data_type": "artist",
+                        "search_term": artist_key,
+                        "artist_id": artist.get("id", ""),
+                        "artist_name": artist.get("title", ""),
+                        "title": artist.get("title", ""),
+                        "id": artist.get("id", ""),
+                        "uri": artist.get("uri", ""),
+                        "year": "",
+                        "release_id": "",
+                        "total_count": artist_info["search_results"].get(
+                            "total_artist", 0
+                        ),
+                    }
+                )
+
+        # Add album/release data
+        if "albums" in artist_info:
+            for queried_artist_id, album_info in artist_info["albums"].items():
+                if "releases" in album_info:
+                    for release in album_info["releases"]:
+                        all_data.append(
+                            {
+                                "data_type": "album",
+                                "search_term": artist_key,
+                                "artist_id": queried_artist_id,
+                                "artist_name": release.get("artist", ""),
+                                "title": release.get("title", ""),
+                                "id": release.get("id", ""),
+                                "uri": "",
+                                "year": release.get("year", ""),
+                                "release_id": release.get("id", ""),
+                                "total_count": album_info.get("total_releases", 0),
+                            }
+                        )
+
+    if all_data:
+        fieldnames = [
+            "data_type",
+            "search_term",
+            "artist_id",
+            "artist_name",
+            "title",
+            "id",
+            "uri",
+            "year",
+            "release_id",
+            "total_count",
+        ]
+
+        with open(filename, "w", newline="", encoding="utf-8") as file:
+            writer = csv.DictWriter(file, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(all_data)
+
+        print(
+            f"[green]Successfully wrote {len(all_data)} total records to {filename}[/green]"
+        )
+
+        # Print summary
+        artist_count = len([d for d in all_data if d["data_type"] == "artist"])
+        album_count = len([d for d in all_data if d["data_type"] == "album"])
+        print(f"[cyan]Summary: {artist_count} artists, {album_count} albums[/cyan]")
+    else:
+        print("[yellow]No data found to write.[/yellow]")
 
 
 def get_app_command_functions(filename: str) -> List[str]:
