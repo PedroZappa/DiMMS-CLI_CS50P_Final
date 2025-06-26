@@ -3,11 +3,9 @@ import sys
 import os
 import logging
 import shlex
-from typing import Dict, Any
-from oauthlib.oauth2 import WebApplicationClient
-from requests.adapters import HTTPAdapter
+import ast
+from typing import Dict, List, Any
 from requests_cache import CachedSession
-from urllib3.util.retry import Retry
 from rich.console import Console
 from rich.table import Table
 from rich.progress import track
@@ -16,19 +14,20 @@ from prompt_toolkit import prompt
 from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.history import InMemoryHistory
 
+# Global Variable
+BASE_URL: str = "https://api.discogs.com"
+CACHED_SESSION: CachedSession = CachedSession("discogs_api_cache", backend="sqlite", expire_after=1800)
+DISCOGS_DATA: Dict[str, Any] = {}
+DISCOGS_TOKEN: str | None = os.getenv("DISCOGS_TOKEN")
+INTERACTIVE_MODE: bool = False
+
 # Init Logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[logging.StreamHandler(sys.stdout)],
 )
-logger = logging.getLogger(__name__)
-
-# Init Requests Cache
-BASE_URL = "https://api.discogs.com"
-CACHED_SESSION = CachedSession("discogs_api_cache", backend="sqlite", expire_after=1800)
-DISCOGS_DATA = {}
-DISCOGS_TOKEN = os.getenv("DISCOGS_TOKEN")
+logger: logging.Logger = logging.getLogger(__name__)
 
 # Initialize Rich's console
 console = Console()
@@ -39,7 +38,6 @@ app = typer.Typer(
     no_args_is_help=True,
     pretty_exceptions_short=False,
 )
-
 
 # Entry Point
 @app.callback(invoke_without_command=True)
@@ -57,8 +55,8 @@ def main(
     :param interactive: Whether to run in interactive mode
     :type interactive: bool
     """
-    global interactive_mode
-    interactive_mode = interactive
+    global INTERACTIVE_MODE
+    INTERACTIVE_MODE = interactive
 
     print("[bold green]Discogs Music Metadata Search[/bold green]")
 
@@ -100,10 +98,11 @@ def interactive_loop(ctx: typer.Context) -> None:
     print("[dim]Type 'help' for available commands[/dim]")
     print("[dim]or 'exit'/'quit'/'bye'/'q' to leave.[/dim]\n")
 
+    # Usage
+    command_function_names = get_app_command_functions("project.py")
+    command_function_names += ["bye", "q", "exit", "quit"]
     # Set up command completion
-    command_completer = WordCompleter(
-        ["search-artists", "list-albums", "help", "bye", "q"], ignore_case=True
-    )
+    command_completer = WordCompleter(command_function_names, ignore_case=True)
 
     # Set up history
     history = InMemoryHistory()
@@ -174,6 +173,8 @@ def exec_cmd(user_input: str) -> None:
             search_artists(" ".join(args))
         elif command == "list_albums":
             list_albums(int(args[0]))
+        elif command == "write_to_file":
+            write_to_file()
         else:
             print(f"[red]Unknown command: {command}[/red]")
             print("[dim]Type 'help' for available commands.[/dim]")
@@ -348,7 +349,6 @@ def get_release_data(artist_id: int) -> Dict[str, Any]:
             for result in data.get("releases", [])[:]:
                 release_info = {
                     "id": result.get("id"),
-                    "main_release": result.get("main_release"),
                     "artist": result.get("artist"),
                     "title": result.get("title"),
                     "year": result.get("year"),
@@ -361,6 +361,47 @@ def get_release_data(artist_id: int) -> Dict[str, Any]:
         result_dict["error"] = str(e)
 
     return result_dict
+
+
+@app.command()
+def write_to_file():
+    """
+    Write data to a CSV file.
+    """
+    with open("out.csv", "w") as file:
+        for artist in DISCOGS_DATA["artists"]:
+            file.write(f"{artist['title'],artist['id'],artist['uri']}\n")
+
+
+def get_app_command_functions(filename: str) -> List[str]:
+    """
+    Extract all app.command() names from a file
+
+    :param filename: The name of the file to read
+    :type filename: str
+    :return: A list of command names
+    :rtype: List[str]
+    """
+    with open(filename, "r") as file:
+        tree = ast.parse(file.read())
+
+    command_functions = []
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef):
+            # Check if function has @app.command() decorator
+            for decorator in node.decorator_list:
+                if (
+                    isinstance(decorator, ast.Call)
+                    and isinstance(decorator.func, ast.Attribute)
+                    and isinstance(decorator.func.value, ast.Name)
+                    and decorator.func.value.id == "app"
+                    and decorator.func.attr == "command"
+                ):
+                    command_functions.append(node.name)
+                    break
+
+    return command_functions
 
 
 if __name__ == "__main__":
