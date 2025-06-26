@@ -10,7 +10,6 @@ from requests_cache import CachedSession
 from urllib3.util.retry import Retry
 from rich.console import Console
 from rich.table import Table
-from rich.prompt import Prompt
 from rich.progress import track
 from rich import print
 from prompt_toolkit import prompt
@@ -46,7 +45,9 @@ app = typer.Typer(
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
-    interactive: bool = typer.Option(False, "--interactive", "-i", help="Run in interactive mode")
+    interactive: bool = typer.Option(
+        False, "--interactive", "-i", help="Run in interactive mode"
+    ),
 ) -> None:
     """
     Main entry point for DiMMS-CLI.
@@ -58,9 +59,9 @@ def main(
     """
     global interactive_mode
     interactive_mode = interactive
-    
+
     print("[bold green]Discogs Music Metadata Search[/bold green]")
-    
+
     # Test authentication on startup
     if DISCOGS_TOKEN:
         if test_authentication():
@@ -74,21 +75,23 @@ def main(
             "[yellow]⚠  No DISCOGS_TOKEN found.\nPlease set your Personal Access Token.[/yellow]"
         )
         sys.exit(1)
-    
+
     # If no subcommand is invoked and interactive mode is requested, start the loop
     if ctx.invoked_subcommand is None:
         if interactive:
             interactive_loop(ctx)
         else:
             # Show help if not in interactive mode and no command given
-            print("\n[yellow]Use --interactive or -i for interactive mode, or specify a command.[/yellow]")
+            print(
+                "\n[yellow]Use --interactive or -i for interactive mode, or specify a command.[/yellow]"
+            )
             print(ctx.get_help())
 
 
 def interactive_loop(ctx: typer.Context) -> None:
     """
     Run the interactive command loop with autocomplete and history.
-    
+
     :param ctx: The Typer context object
     :type ctx: typer.Context
     :return: None
@@ -96,41 +99,45 @@ def interactive_loop(ctx: typer.Context) -> None:
     print("\n[bold cyan]Interactive Mode Started[/bold cyan]")
     print("[dim]Type 'help' for available commands[/dim]")
     print("[dim]or 'exit'/'quit'/'bye'/'q' to leave.[/dim]\n")
-    
+
     # Set up command completion
-    command_completer = WordCompleter([
-        'search-artists', 'list-albums', 'help', 'bye', 'q'
-    ], ignore_case=True)
-    
+    command_completer = WordCompleter(
+        ["search-artists", "list-albums", "help", "bye", "q"], ignore_case=True
+    )
+
     # Set up history
     history = InMemoryHistory()
-    
+
     while True:
         try:
             # Get user input with autocomplete and history
             user_input = prompt(
-                [('bold fg:ansiblue', 'DiMMS '), ('bold fg:ansigreen', '()'), ('', ': ')],
+                [
+                    ("bold fg:ansiblue", "DiMMS "),
+                    ("bold fg:ansigreen", "()"),
+                    ("", ": "),
+                ],
                 completer=command_completer,
                 history=history,
-                complete_while_typing=True
+                complete_while_typing=True,
             ).strip()
-            
+
             if not user_input:
                 continue
-                
+
             # Handle exit commands
-            if user_input.lower() in ['bye', 'q']:
+            if user_input.lower() in ["bye", "q"]:
                 print("[bold green]Goodbye![/bold green]")
                 break
-                
+
             # Handle help command
-            if user_input.lower() in ['help', 'h']:
+            if user_input.lower() in ["help", "h"]:
                 typer.echo(ctx.get_help())
                 continue
-                
+
             # Parse and execute command
             exec_cmd(user_input)
-            
+
         except KeyboardInterrupt:
             print("\nUse 'bye'/'q' to leave.")
         except EOFError:
@@ -143,20 +150,21 @@ def interactive_loop(ctx: typer.Context) -> None:
 def exec_cmd(user_input: str) -> None:
     """
     Parse and execute a command from user input.
-    
+
     :param user_input: The command string entered by the user
     :type user_input: str
+    :return: None
     """
     try:
         # Split the input into command and arguments
         parts = shlex.split(user_input)
         if not parts:
             return
-            
+
         print(user_input)
-        command = parts[0].lower().replace('-', '_')  # Convert kebab-case to snake_case
+        command = parts[0].lower().replace("-", "_")  # Convert kebab-case to snake_case
         args = parts[1:]
-        
+
         # Execute the appropriate command
         if command == "search_artists":
             if not args:
@@ -169,7 +177,7 @@ def exec_cmd(user_input: str) -> None:
         else:
             print(f"[red]Unknown command: {command}[/red]")
             print("[dim]Type 'help' for available commands.[/dim]")
-            
+
     except Exception as e:
         print(f"[red]Error executing command: {e}[/red]")
 
@@ -254,6 +262,7 @@ def get_artists_data(artist_name: str) -> Dict[str, Any]:
     :type artist_name: str
     :returns: A dictionary containing the found artists data
     :rtype: Dict[str, Any]
+    :except Exception: Search error
     """
     result_dict = {}
     try:
@@ -324,9 +333,7 @@ def get_release_data(artist_id: int) -> Dict[str, Any]:
     result_dict = {}
     try:
         headers = get_discogs_headers()
-        params = {
-            "artist": artist_id
-        }
+        params = {"artist": artist_id}
 
         response = CACHED_SESSION.get(
             f"{BASE_URL}/artists/{artist_id}/releases", headers=headers, params=params
@@ -352,7 +359,7 @@ def get_release_data(artist_id: int) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Search error: {e}")
         result_dict["error"] = str(e)
-        
+
     return result_dict
 
 
