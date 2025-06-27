@@ -1,6 +1,8 @@
 # CS50P_Final
 
-## Video Demo: https://youtu.be/Q-dtTLazVEw
+## Video Demo
+
+<img alt="Video Demo" src="./video/CS50P_Final_Video.gif" width="100%" />
 
 ## Description
 
@@ -23,7 +25,8 @@ CS50P_Final/
 ├── requirements.txt       # Python dependencies
 ├── scripts/
 │   ├── build.sh           # Shell script to build the project
-│   └── run.sh             # Shell script to run the project
+│   ├── run.sh             # Shell script to run the project
+│   └── thx-bye.sh         # Shell script to say goodbye
 └── test_project.py        # Test suite for the project
 ```
 
