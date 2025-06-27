@@ -1,4 +1,4 @@
-# CS50P_Final
+# CS50P_Final - DiMMS-CLI
 
 ## Video Demo
 
