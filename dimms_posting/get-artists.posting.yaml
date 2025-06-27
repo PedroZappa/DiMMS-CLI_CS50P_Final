@@ -1,0 +1,12 @@
+name: Artists
+url: $BASE_URL/database/search
+headers:
+- name: Authorization
+  value: Discogs token=$DISCOGS_TOKEN
+- name: User-Agent
+  value: DiMMs-CLI/1.0
+params:
+- name: q
+  value: Muse
+- name: type
+  value: artist

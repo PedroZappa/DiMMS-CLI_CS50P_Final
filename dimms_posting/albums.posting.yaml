@@ -1,0 +1,7 @@
+name: Albums
+url: $BASE_URL/artists/1003/releases
+headers:
+- name: Authorization
+  value: Discogs token=$DISCOGS_TOKEN
+- name: User-Agent
+  value: DiMMS-CLI/1.0

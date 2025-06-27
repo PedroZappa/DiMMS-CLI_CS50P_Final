@@ -54,7 +54,7 @@ run:	## Run project
 build:	## Build project
 	@echo "* $(MAG)$(NAME) $(YEL)building$(D): $(_SUCCESS)"
 	source ./scripts/build.sh
-	echo "* $(MAG)$(NAME) $(YEL)finished building$(D):"
+	@echo "* $(MAG)$(NAME) $(YEL)finished building$(D):"
 
 ##@ Utility Rules 
 
@@ -63,30 +63,44 @@ black:		## Run black formatter
 
 ##@ Test/Debug Rules 
 
+test:			## Run tests
+	@$(MAKE) pytest
+	@$(MAKE) mypy
+
+pytest:		## run pytest
+	@echo "* $(MAG)$(NAME) $(YEL)running pytest$(D):"
+	pytest $(MAIN_TEST)
+	@echo "* $(MAG)$(NAME) pytest suite $(YEL)finished$(D):"
+
+mypy:		## Run mypy static checker
+	@echo "* $(MAG)$(NAME) $(YEL)running type checker$(D):"
+	mypy $(MAIN)
+	@echo "* $(MAG)$(NAME) type checker $(YEL)finished$(D):"
+
 posting:	## Run posting
 	posting --collection dimms_posting --env .env
 
-test:		## Run tests
-	pytest $(MAIN_TEST)
-
-mypy:		## Run mypy static checker
-	mypy $(MAIN)
-
 ##@ Clean-up Rules 󰃢
 
-clean: 	## Remove object files
+# Define files/directories to clean
+CLEAN_TARGETS := $(VENV) \
+                 *.sqlite \
+                 __* \
+                 *.pyc \
+                 .*_cache \
+                 build/ \
+                 dist/ \
+                 *_dump.csv
+
+clean: ## Remove object files
 	@echo "*** $(YEL)Removing $(MAG)$(NAME)$(D) and deps $(YEL)object files$(D)"
-	@if [ -d "$(VENV)" ]; then \
-		if [ -d "$(VENV)" ]; then \
-			$(RM) $(VENV); \
-			$(RM) *.sqlite; \
-			$(RM) "app/__pycache__"; \
-			$(RM) "app/LookinSlack.egg-info"; \
-			echo "*** $(YEL)Removing $(CYA)$(BUILD_PATH)$(D) folder & files$(D): $(_SUCCESS)"; \
+	@for target in $(CLEAN_TARGETS); do \
+		if [ -e "$$target" ] || [ -d "$$target" ]; then \
+			$(RM) "$$target"; \
+			echo "*** $(YEL)Removed $(CYA)$$target$(D)"; \
 		fi; \
-	else \
-		echo " $(RED)$(D) [$(GRN)Nothing to clean!$(D)]"; \
-	fi
+	done
+	@echo "$(_SUCCESS) Clean completed!"
 
 ##@ Help 󰛵
 

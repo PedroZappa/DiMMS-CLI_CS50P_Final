@@ -322,6 +322,7 @@ def get_artists_data(artist_name: str) -> Dict[str, Any]:
                 result_dict["artists"].append(artist_info)
         else:
             result_dict["error"] = f"Error: {response.status_code}"
+            logger.error(f"Data error: {response.status_code}")
 
     except Exception as e:
         logger.error(f"Search error: {e}")
