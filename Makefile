@@ -38,10 +38,10 @@ MKDIR_P	= mkdir -p
 
 ##@ Project Scaffolding 󰛵
 
-all: 	## Build and run project
+all:			## Build and run project
 	$(MAKE) run
 
-run:	## Run project
+run:			## Run project
 	@if [ ! -d "$(VENV)" ]; then \
 		$(MAKE) build; \
 	fi
@@ -51,19 +51,23 @@ run:	## Run project
 	@echo "$(GRN)$(_SEP)$(D)"
 	@echo "* $(MAG)$(NAME) $(YEL)finished$(D):"
 
-build:	## Build project
+build:		## Build project
 	@echo "* $(MAG)$(NAME) $(YEL)building$(D): $(_SUCCESS)"
 	source ./scripts/build.sh
 	@echo "* $(MAG)$(NAME) $(YEL)finished building$(D):"
 
 ##@ Utility Rules 
 
+EXCLUDE_DIRS = $(VENV) \
+                 .*_cache \
+                 __* \
+
 black:		## Run black formatter
-	black $(MAIN)
+	black . --exclude=$(EXCLUDE_DIRS)
 
 ##@ Test/Debug Rules 
 
-test:			## Run tests
+test:			## Run all tests
 	@$(MAKE) pytest
 	@$(MAKE) mypy
 
@@ -72,24 +76,20 @@ pytest:		## run pytest
 	pytest $(MAIN_TEST)
 	@echo "* $(MAG)$(NAME) pytest suite $(YEL)finished$(D):"
 
-mypy:		## Run mypy static checker
+mypy:			## Run mypy static checker
 	@echo "* $(MAG)$(NAME) $(YEL)running type checker$(D):"
 	mypy $(MAIN)
 	@echo "* $(MAG)$(NAME) type checker $(YEL)finished$(D):"
 
-posting:	## Run posting
+posting:	## Run posting API testing client
 	posting --collection dimms_posting --env .env
 
 ##@ Clean-up Rules 󰃢
 
 # Define files/directories to clean
-CLEAN_TARGETS := $(VENV) \
+CLEAN_TARGETS := $(EXCLUDE_DIRS) \
                  *.sqlite \
-                 __* \
                  *.pyc \
-                 .*_cache \
-                 build/ \
-                 dist/ \
                  *_dump.csv
 
 clean: ## Remove object files
@@ -114,7 +114,7 @@ help: 	## Display this help page
 ## Tweaked from source:
 ### https://www.padok.fr/en/blog/beautiful-makefile-awk
 
-.PHONY: create_venv source_venv
+.PHONY: test mypy black posting clean help
 
 #==============================================================================#
 #                                  UTILS                                       #

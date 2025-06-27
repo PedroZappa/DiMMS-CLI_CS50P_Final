@@ -1,6 +1,6 @@
 # CS50P_Final
 
-## Video Demo: <URL>
+## Video Demo: https://youtu.be/Q-dtTLazVEw
 
 ## Description
 
@@ -44,7 +44,14 @@ and [Rich-CLI](https://github.com/Textualize/rich-cli).
    cd CS50P_Final
    ```
 
-2. Install dependencies:
+
+2. Source .venv environment:
+
+   ```sh
+   source .env && source .venv/bin/activate
+   ```
+
+3. Install dependencies:
 
    ```sh
    pip install -r requirements.txt
@@ -56,18 +63,14 @@ and [Rich-CLI](https://github.com/Textualize/rich-cli).
 
   ```sh
   python project.py
-  ```
-
-- To run application in interactive mode:
-
-  ```sh
+  # For interactive mode
   python project.py -i
   ```
 
-- To run tests:
+- See all available commands
 
   ```sh
-  make test
+  make help
   ```
 
 ## Docs
@@ -80,6 +83,8 @@ and [Rich-CLI](https://github.com/Textualize/rich-cli).
 
 - [Rich-CLI](https://github.com/Textualize/rich-cli)
 - [Typer](https://typer.tiangolo.com/)
+- [prompt_toolkit](https://python-prompt-toolkit.readthedocs.io/en/master/)
+- [requests-rache](https://pypi.org/project/requests-cache/)
 
 ## License
 
