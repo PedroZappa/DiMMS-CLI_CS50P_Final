@@ -12,7 +12,7 @@ SHELL	:= bash --rcfile ~/.bashrc
 NAME = CS50P_Final
 VENV = .venv
 MAIN = project.py
-ARGS = 
+ARGS = -i
 MAIN_TEST = test_project.py
 EXEC = ./scripts/run.sh && python3 $(MAIN)
 
